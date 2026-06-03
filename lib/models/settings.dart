@@ -1,4 +1,3 @@
-
 import 'package:hive/hive.dart';
 
 part 'settings.g.dart';
@@ -18,7 +17,7 @@ class AppSettings extends HiveObject {
   String? companyLogoPath;
 
   @HiveField(4)
-  late String language; // 'ar' for Arabic
+  late String language;
 
   @HiveField(5)
   late bool showDateInPrint;
@@ -30,16 +29,16 @@ class AppSettings extends HiveObject {
   late bool printAsDebitCredit;
 
   @HiveField(8)
-  late String passwordHash; // Hashed password for backup option
+  late String passwordHash;
 
   @HiveField(9)
   late bool fingerprintEnabled;
 
   @HiveField(10)
-  late List<String> categories; // List of custom categories
+  late List<String> categories;
 
   @HiveField(11)
-  late List<Map<String, dynamic>> currencies; // [{name: 'دولار', symbol: '$', exchangeRate: 1.0}]
+  late List<Map<String, dynamic>> currencies;
 
   @HiveField(12)
   String? backupFolderPath;
@@ -48,7 +47,7 @@ class AppSettings extends HiveObject {
   late bool autoBackupEnabled;
 
   @HiveField(14)
-  String? autoBackupTime; // e.g., "23:00"
+  String? autoBackupTime;
 
   @HiveField(15)
   String? whatsappIntroMessage;
@@ -117,7 +116,7 @@ class AppSettings extends HiveObject {
     ],
     this.currencies = const [
       {'name': 'محلي', 'symbol': 'ج.م', 'exchangeRate': 1.0},
-      {'name': 'دولار', 'symbol': '$', 'exchangeRate': 30.0},
+      {'name': 'دولار', 'symbol': '\$', 'exchangeRate': 30.0},
       {'name': 'سعودي', 'symbol': 'ر.س', 'exchangeRate': 8.0},
       {'name': 'جرام', 'symbol': 'جرام', 'exchangeRate': 1.0},
     ],
