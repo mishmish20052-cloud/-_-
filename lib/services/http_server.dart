@@ -82,7 +82,8 @@ class HttpServerService {
   }
 
   String _buildHtmlPage() {
-    return '''
+    // استخدام raw string (r''') لمنع تفسير $ من قبل Dart
+    return r'''
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
