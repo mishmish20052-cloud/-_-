@@ -13,16 +13,33 @@ jobs:
       - name: جلب الكود
         uses: actions/checkout@v4
 
-      - name: فك الضغط
+      - name: تثبيت أداة 7z
+        run: sudo apt-get update && sudo apt-get install -y p7zip-full
+
+      - name: فك الضغط باستخدام 7z
         run: |
-          sudo apt-get install unzip
-          unzip -o '*.zip' -d ./
+          7z x '*.zip' -o./ -y
           rm -f *.zip
+
+      - name: تنظيف الهيكل (نقل الملفات من المجلدات المتداخلة)
+        run: |
+          # إذا كان هناك مجلد باسم "files.manuscdn/دفتر_الحسابات" انقل محتوياته
+          if [ -d "files.manuscdn/دفتر_الحسابات" ]; then
+            mv files.manuscdn/دفتر_الحسابات/* ./
+            rm -rf files.manuscdn
+          fi
+          # إذا كان هناك مجلد "دفتر_الحسابات" مباشرة، انقل محتوياته
+          if [ -d "دفتر_الحسابات" ]; then
+            mv دفتر_الحسابات/* ./
+            rm -rf دفتر_الحسابات
+          fi
+          # إزالة أي مجلدات فارغة أو متكررة
+          find . -type d -empty -delete
 
       - name: دفع التغييرات
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "فك ضغط الملفات وحذف ZIP" || echo "لا تغييرات"
+          git commit -m "فك ضغط الملفات وتنظيف الهيكل" || echo "لا تغييرات"
           git push
