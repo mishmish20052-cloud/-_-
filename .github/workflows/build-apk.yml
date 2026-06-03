@@ -18,7 +18,7 @@ jobs:
       - name: حذف مجلد android القديم وإنشاء جديد
         run: |
           rm -rf android/
-          flutter create --platforms=android .
+          flutter create --project-name daftar_alhesabat --platforms=android .
       
       - run: flutter pub get
       
