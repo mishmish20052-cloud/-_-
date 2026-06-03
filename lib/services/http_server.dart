@@ -1,4 +1,3 @@
-
 import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -60,8 +59,9 @@ class HttpServerService {
       });
     });
 
+    // ✅ التصحيح هنا: تم دمج السطر المكسور وإغلاق علامات التنصيص بشكل صحيح
     _server = await shelf_io.serve(app, ipAddress, 7777);
-    print('Serving at http://
+    print('Serving at http://$ipAddress:7777');
     return 'http://$ipAddress:7777';
   }
 
