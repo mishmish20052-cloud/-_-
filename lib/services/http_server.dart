@@ -116,21 +116,26 @@ class HttpServerService {
             <a href="/api/export/csv" class="export-btn">تصدير كل البيانات CSV</a>
         </div>
         <h2>قائمة العملاء</h2>
-        <table id="accountsTable"><thead><tr><th>الاسم</th><th>الاسم المساعد</th><th>العملة</th><th>التصنيف</th><th>المبلغ المستحق (عليه)</th><th>المبلغ المستحق (له)</th></tr></thead><tbody></tbody></table>
-        <div id="transactionsDetails" class="details"><h2 id="detailsAccountName"></h2><h3>المعاملات</h3><table id="transactionsTable"><thead><tr><th>المبلغ</th><th>النوع</th><th>التاريخ</th><th>الملاحظة</th></tr></thead><tbody></tbody></table></div>
+        <table id="accountsTable"><thead><tr><th>الاسم</th><th>الاسم المساعد</th><th>العملة</th><th>التصنيف</th><th>المبلغ المستحق (عليه)</th><th>المبلغ المستحق (له)</th></thead><tbody></tbody></table>
+        <div id="transactionsDetails" class="details"><h2 id="detailsAccountName"></h2><h3>المعاملات</h3><table id="transactionsTable"><thead><tr><th>المبلغ</th><th>النوع</th><th>التاريخ</th><th>الملاحظة</th></thead><tbody></tbody></table></div>
     </div>
     <script>
         let allAccounts = [];
         let allCurrencies = new Set();
+        
         async function loadAccounts() {
             const response = await fetch('/api/accounts');
+            if (!response.ok) return;
             allAccounts = await response.json();
             displayAccounts(allAccounts);
             populateCurrencyFilter();
         }
+        
         function populateCurrencyFilter() {
+            allCurrencies.clear();
             allAccounts.forEach(account => allCurrencies.add(account.currency));
             const filterCurrencySelect = document.getElementById('filterCurrency');
+            filterCurrencySelect.innerHTML = '<option value="">كل العملات</option>';
             allCurrencies.forEach(currency => {
                 const option = document.createElement('option');
                 option.value = currency;
@@ -138,37 +143,61 @@ class HttpServerService {
                 filterCurrencySelect.appendChild(option);
             });
         }
+        
         function displayAccounts(accounts) {
             const tableBody = document.querySelector('#accountsTable tbody');
             tableBody.innerHTML = '';
             accounts.forEach(account => {
                 const row = tableBody.insertRow();
                 row.onclick = () => showTransactions(account.id, account.name);
-                row.innerHTML = `<td>${account.name}</td><td>${account.assistantName || ''}</td><td>${account.currency}</td><td>${account.category}</td><td>${account.balanceDue.toFixed(2)}</td><td>${account.balanceFor.toFixed(2)}</td>`;
+                const balanceDue = typeof account.balanceDue === 'number' ? account.balanceDue.toFixed(2) : '0.00';
+                const balanceFor = typeof account.balanceFor === 'number' ? account.balanceFor.toFixed(2) : '0.00';
+                row.innerHTML = `<td>${escapeHtml(account.name)}</td><td>${escapeHtml(account.assistantName || '')}</td><td>${escapeHtml(account.currency)}</td><td>${escapeHtml(account.category)}</td><td>${balanceDue}</td><td>${balanceFor}</td>`;
             });
         }
+        
         async function showTransactions(accountId, accountName) {
             document.getElementById('detailsAccountName').textContent = `معاملات العميل: ${accountName}`;
             const response = await fetch(`/api/transactions/${accountId}`);
+            if (!response.ok) return;
             const transactions = await response.json();
             const tableBody = document.querySelector('#transactionsTable tbody');
             tableBody.innerHTML = '';
             transactions.forEach(transaction => {
                 const row = tableBody.insertRow();
-                row.innerHTML = `<td>${transaction.amount.toFixed(2)}</td><td>${transaction.type == 'due' ? 'عليه' : 'له'}</td><td>${new Date(transaction.date).toLocaleDateString('ar-EG')}</td><td>${transaction.note || ''}</td>`;
+                const amount = typeof transaction.amount === 'number' ? transaction.amount.toFixed(2) : '0.00';
+                const typeText = transaction.type == 'due' ? 'عليه' : 'له';
+                let dateStr = '';
+                try {
+                    dateStr = new Date(transaction.date).toLocaleDateString('ar-EG');
+                } catch(e) { dateStr = ''; }
+                row.innerHTML = `<td>${amount}</td><td>${typeText}</td><td>${dateStr}</td><td>${escapeHtml(transaction.note || '')}</td>`;
             });
             document.getElementById('transactionsDetails').style.display = 'block';
         }
+        
         function applyFilters() {
             const searchName = document.getElementById('searchName').value.toLowerCase();
             const filterCurrency = document.getElementById('filterCurrency').value;
             let filteredAccounts = allAccounts.filter(account => {
-                const matchesName = account.name.toLowerCase().includes(searchName) || (account.assistantName && account.assistantName.toLowerCase().includes(searchName));
-                const matchesCurrency = filterCurrency == '' || account.currency == filterCurrency;
+                const assistant = account.assistantName || '';
+                const matchesName = account.name.toLowerCase().includes(searchName) || assistant.toLowerCase().includes(searchName);
+                const matchesCurrency = filterCurrency === '' || account.currency === filterCurrency;
                 return matchesName && matchesCurrency;
             });
             displayAccounts(filteredAccounts);
         }
+        
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+        
         loadAccounts();
     </script>
 </body>
