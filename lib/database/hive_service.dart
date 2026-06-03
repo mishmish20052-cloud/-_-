@@ -1,45 +1,34 @@
-
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:hive/hive.dart';
 import 'package:daftar_alhesabat/models/account.dart';
 import 'package:daftar_alhesabat/models/transaction.dart';
-import 'package:daftar_alhesabat/models/settings.dart';
 
 class HiveService {
-  static late Box<Account> accountsBox;
-  static late Box<Transaction> transactionsBox;
-  static late Box<AppSettings> settingsBox;
+  late Box<Account> _accountsBox;
+  late Box<Transaction> _transactionsBox;
 
-  static Future<void> init() async {
-    await Hive.initFlutter();
-    Hive.registerAdapter(AccountAdapter());
-    Hive.registerAdapter(TransactionAdapter());
-    Hive.registerAdapter(AppSettingsAdapter());
+  // Getters للوصول إلى الصناديق من خارج الكلاس
+  Box<Account> get accountsBox => _accountsBox;
+  Box<Transaction> get transactionsBox => _transactionsBox;
 
-    accountsBox = await Hive.openBox<Account>('accounts');
-    transactionsBox = await Hive.openBox<Transaction>('transactions');
-    settingsBox = await Hive.openBox<AppSettings>('settings');
-
-    // Initialize default settings if not present
-    if (settingsBox.isEmpty) {
-      await settingsBox.add(AppSettings());
-    }
+  Future<void> init() async {
+    // تأكد من تسجيل المحولات (adapters) إذا لزم الأمر
+    // Hive.registerAdapter(AccountAdapter());
+    // Hive.registerAdapter(TransactionAdapter());
+    
+    _accountsBox = await Hive.openBox<Account>('accounts');
+    _transactionsBox = await Hive.openBox<Transaction>('transactions');
   }
 
-  // Account operations
-  List<Account> getAccounts() => accountsBox.values.toList();
-  Account? getAccount(String id) => accountsBox.values.firstWhere((account) => account.id == id);
-  Future<void> addAccount(Account account) => accountsBox.put(account.id, account);
-  Future<void> updateAccount(Account account) => accountsBox.put(account.id, account);
-  Future<void> deleteAccount(String id) => accountsBox.delete(id);
+  // باقي دوال HiveService (مثل getAccounts, getTransactionsForAccount, etc.)
+  List<Account> getAccounts() {
+    return _accountsBox.values.toList();
+  }
 
-  // Transaction operations
-  List<Transaction> getTransactionsForAccount(String accountId) =>
-      transactionsBox.values.where((transaction) => transaction.accountId == accountId).toList();
-  Future<void> addTransaction(Transaction transaction) => transactionsBox.add(transaction);
-  Future<void> updateTransaction(Transaction transaction) => transactionsBox.put(transaction.key, transaction);
-  Future<void> deleteTransaction(int key) => transactionsBox.delete(key);
-
-  // Settings operations
-  AppSettings getSettings() => settingsBox.getAt(0)!; // Assuming only one settings object
-  Future<void> updateSettings(AppSettings settings) => settingsBox.putAt(0, settings);
+  List<Transaction> getTransactionsForAccount(String accountId) {
+    return _transactionsBox.values
+        .where((t) => t.accountId == accountId)
+        .toList();
+  }
+  
+  // أضف أي دوال أخرى تستخدمها في مشروعك
 }
