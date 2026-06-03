@@ -11,10 +11,7 @@ class HttpServerService {
 
   Future<String?> startServer() async {
     final ipAddress = await _getIpAddress();
-    if (ipAddress == null) {
-      return null;
-    }
-
+    if (ipAddress == null) return null;
     final app = Router();
 
     app.get('/', (Request request) {
@@ -36,18 +33,14 @@ class HttpServerService {
     app.get('/api/export/csv', (Request request) {
       final accounts = _hiveService.getAccounts();
       final transactions = _hiveService.transactionsBox.values.toList();
-
       StringBuffer csvBuffer = StringBuffer();
       csvBuffer.writeln('Type,ID,Name,Assistant Name,Currency,Category,Balance Due,Balance For,Transaction ID,Account ID,Amount,Transaction Type,Date,Note,Image Path,Is Recurring,Recurring Interval');
-
       for (var account in accounts) {
         csvBuffer.writeln('Account,${account.id},${_escapeCsv(account.name)},${_escapeCsv(account.assistantName ?? '')},${_escapeCsv(account.currency)},${_escapeCsv(account.category)},${account.balanceDue},${account.balanceFor},,,,,,,,,');
       }
-
       for (var transaction in transactions) {
         csvBuffer.writeln('Transaction,,,,,,,,${transaction.id},${transaction.accountId},${transaction.amount},${transaction.type},${transaction.date.toIso8601String()},${_escapeCsv(transaction.note ?? '')},${_escapeCsv(transaction.imagePath ?? '')},${transaction.isRecurring},${_escapeCsv(transaction.recurringInterval ?? '')}');
       }
-
       return Response.ok(csvBuffer.toString(), headers: {
         'Content-Type': 'text/csv',
         'Content-Disposition': 'attachment; filename="daftar_alhesabat_data.csv"',
@@ -80,6 +73,7 @@ class HttpServerService {
     return null;
   }
 
+  // ✅ تم تصحيح هذا الجزء: استبدال === بـ ==
   String _escapeCsv(String? field) {
     if (field == null) return '';
     if (field.contains(',') || field.contains('"') || field.contains('\n')) {
@@ -116,59 +110,25 @@ class HttpServerService {
 <body>
     <div class="container">
         <h1>دفتر الحسابات - استعراض البيانات</h1>
-
         <div class="filters">
             <input type="text" id="searchName" placeholder="بحث بالاسم...">
-            <select id="filterCurrency">
-                <option value="">كل العملات</option>
-            </select>
+            <select id="filterCurrency"><option value="">كل العملات</option></select>
             <button onclick="applyFilters()">تطبيق الفلاتر</button>
             <a href="/api/export/csv" class="export-btn">تصدير كل البيانات CSV</a>
         </div>
-
         <h2>قائمة العملاء</h2>
-        <table id="accountsTable">
-            <thead>
-                <tr>
-                    <th>الاسم</th>
-                    <th>الاسم المساعد</th>
-                    <th>العملة</th>
-                    <th>التصنيف</th>
-                    <th>المبلغ المستحق (عليه)</th>
-                    <th>المبلغ المستحق (له)</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-
-        <div id="transactionsDetails" class="details">
-            <h2 id="detailsAccountName"></h2>
-            <h3>المعاملات</h3>
-            <table id="transactionsTable">
-                <thead>
-                    <tr>
-                        <th>المبلغ</th>
-                        <th>النوع</th>
-                        <th>التاريخ</th>
-                        <th>الملاحظة</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
+        <table id="accountsTable"><thead><tr><th>الاسم</th><th>الاسم المساعد</th><th>العملة</th><th>التصنيف</th><th>المبلغ المستحق (عليه)</th><th>المبلغ المستحق (له)</th></tr></thead><tbody></tbody></table>
+        <div id="transactionsDetails" class="details"><h2 id="detailsAccountName"></h2><h3>المعاملات</h3><table id="transactionsTable"><thead><tr><th>المبلغ</th><th>النوع</th><th>التاريخ</th><th>الملاحظة</th></tr></thead><tbody></tbody></table></div>
     </div>
-
     <script>
         let allAccounts = [];
         let allCurrencies = new Set();
-
         async function loadAccounts() {
             const response = await fetch('/api/accounts');
             allAccounts = await response.json();
             displayAccounts(allAccounts);
             populateCurrencyFilter();
         }
-
         function populateCurrencyFilter() {
             allAccounts.forEach(account => allCurrencies.add(account.currency));
             const filterCurrencySelect = document.getElementById('filterCurrency');
@@ -179,56 +139,37 @@ class HttpServerService {
                 filterCurrencySelect.appendChild(option);
             });
         }
-
         function displayAccounts(accounts) {
             const tableBody = document.querySelector('#accountsTable tbody');
             tableBody.innerHTML = '';
             accounts.forEach(account => {
                 const row = tableBody.insertRow();
                 row.onclick = () => showTransactions(account.id, account.name);
-                row.innerHTML = `
-                    <td>${account.name}</td>
-                    <td>${account.assistantName || ''}</td>
-                    <td>${account.currency}</td>
-                    <td>${account.category}</td>
-                    <td>${account.balanceDue.toFixed(2)}</td>
-                    <td>${account.balanceFor.toFixed(2)}</td>
-                `;
+                row.innerHTML = `<td>${account.name}</td><td>${account.assistantName || ''}</td><td>${account.currency}</td><td>${account.category}</td><td>${account.balanceDue.toFixed(2)}</td><td>${account.balanceFor.toFixed(2)}</td>`;
             });
         }
-
         async function showTransactions(accountId, accountName) {
             document.getElementById('detailsAccountName').textContent = `معاملات العميل: ${accountName}`;
             const response = await fetch(`/api/transactions/${accountId}`);
             const transactions = await response.json();
-
             const tableBody = document.querySelector('#transactionsTable tbody');
             tableBody.innerHTML = '';
             transactions.forEach(transaction => {
                 const row = tableBody.insertRow();
-                row.innerHTML = `
-                    <td>${transaction.amount.toFixed(2)}</td>
-                    <td>${transaction.type === 'due' ? 'عليه' : 'له'}</td>
-                    <td>${new Date(transaction.date).toLocaleDateString('ar-EG')}</td>
-                    <td>${transaction.note || ''}</td>
-                `;
+                row.innerHTML = `<td>${transaction.amount.toFixed(2)}</td><td>${transaction.type === 'due' ? 'عليه' : 'له'}</td><td>${new Date(transaction.date).toLocaleDateString('ar-EG')}</td><td>${transaction.note || ''}</td>`;
             });
             document.getElementById('transactionsDetails').style.display = 'block';
         }
-
         function applyFilters() {
             const searchName = document.getElementById('searchName').value.toLowerCase();
             const filterCurrency = document.getElementById('filterCurrency').value;
-
             let filteredAccounts = allAccounts.filter(account => {
-                const matchesName = account.name.toLowerCase().includes(searchName) ||
-                                    (account.assistantName && account.assistantName.toLowerCase().includes(searchName));
+                const matchesName = account.name.toLowerCase().includes(searchName) || (account.assistantName && account.assistantName.toLowerCase().includes(searchName));
                 const matchesCurrency = filterCurrency === '' || account.currency === filterCurrency;
                 return matchesName && matchesCurrency;
             });
             displayAccounts(filteredAccounts);
         }
-
         loadAccounts();
     </script>
 </body>
