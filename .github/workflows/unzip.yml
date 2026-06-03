@@ -6,6 +6,9 @@ on:
       - '*.zip'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   unzip:
     runs-on: ubuntu-latest
@@ -23,17 +26,14 @@ jobs:
 
       - name: تنظيف الهيكل (نقل الملفات من المجلدات المتداخلة)
         run: |
-          # إذا كان هناك مجلد باسم "files.manuscdn/دفتر_الحسابات" انقل محتوياته
           if [ -d "files.manuscdn/دفتر_الحسابات" ]; then
             mv files.manuscdn/دفتر_الحسابات/* ./
             rm -rf files.manuscdn
           fi
-          # إذا كان هناك مجلد "دفتر_الحسابات" مباشرة، انقل محتوياته
           if [ -d "دفتر_الحسابات" ]; then
             mv دفتر_الحسابات/* ./
             rm -rf دفتر_الحسابات
           fi
-          # إزالة أي مجلدات فارغة أو متكررة
           find . -type d -empty -delete
 
       - name: دفع التغييرات
