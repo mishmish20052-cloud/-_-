@@ -17,26 +17,22 @@ class HttpServerService {
 
     final app = Router();
 
-    // Serve static HTML/CSS/JS
     app.get('/', (Request request) {
       return Response.ok(_buildHtmlPage(), headers: {'Content-Type': 'text/html'});
     });
 
-    // API to get accounts
     app.get('/api/accounts', (Request request) {
       final accounts = _hiveService.getAccounts();
       final accountsJson = jsonEncode(accounts.map((e) => e.toJson()).toList());
       return Response.ok(accountsJson, headers: {'Content-Type': 'application/json'});
     });
 
-    // API to get transactions for a specific account
     app.get('/api/transactions/<accountId>', (Request request, String accountId) {
       final transactions = _hiveService.getTransactionsForAccount(accountId);
       final transactionsJson = jsonEncode(transactions.map((e) => e.toJson()).toList());
       return Response.ok(transactionsJson, headers: {'Content-Type': 'application/json'});
     });
 
-    // API to export all data as CSV
     app.get('/api/export/csv', (Request request) {
       final accounts = _hiveService.getAccounts();
       final transactions = _hiveService.transactionsBox.values.toList();
@@ -49,7 +45,6 @@ class HttpServerService {
       }
 
       for (var transaction in transactions) {
-        final account = _hiveService.getAccount(transaction.accountId);
         csvBuffer.writeln('Transaction,,,,,,,,${transaction.id},${transaction.accountId},${transaction.amount},${transaction.type},${transaction.date.toIso8601String()},${_escapeCsv(transaction.note ?? '')},${_escapeCsv(transaction.imagePath ?? '')},${transaction.isRecurring},${_escapeCsv(transaction.recurringInterval ?? '')}');
       }
 
@@ -59,7 +54,6 @@ class HttpServerService {
       });
     });
 
-    // ✅ التصحيح هنا: تم دمج السطر المكسور وإغلاق علامات التنصيص بشكل صحيح
     _server = await shelf_io.serve(app, ipAddress, 7777);
     print('Serving at http://$ipAddress:7777');
     return 'http://$ipAddress:7777';
@@ -144,9 +138,7 @@ class HttpServerService {
                     <th>المبلغ المستحق (له)</th>
                 </tr>
             </thead>
-            <tbody>
-                <!-- Accounts will be loaded here by JavaScript -->
-            </tbody>
+            <tbody></tbody>
         </table>
 
         <div id="transactionsDetails" class="details">
@@ -161,9 +153,7 @@ class HttpServerService {
                         <th>الملاحظة</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <!-- Transactions will be loaded here by JavaScript -->
-                </tbody>
+                <tbody></tbody>
             </table>
         </div>
     </div>
