@@ -156,7 +156,7 @@ class HttpServerService {
             tableBody.innerHTML = '';
             transactions.forEach(transaction => {
                 const row = tableBody.insertRow();
-                row.innerHTML = `<td>${transaction.amount.toFixed(2)}</td><td>${transaction.type === 'due' ? 'عليه' : 'له'}</td><td>${new Date(transaction.date).toLocaleDateString('ar-EG')}</td><td>${transaction.note || ''}</td>`;
+                row.innerHTML = `<td>${transaction.amount.toFixed(2)}</td><td>${transaction.type == 'due' ? 'عليه' : 'له'}</td><td>${new Date(transaction.date).toLocaleDateString('ar-EG')}</td><td>${transaction.note || ''}</td>`;
             });
             document.getElementById('transactionsDetails').style.display = 'block';
         }
@@ -165,7 +165,7 @@ class HttpServerService {
             const filterCurrency = document.getElementById('filterCurrency').value;
             let filteredAccounts = allAccounts.filter(account => {
                 const matchesName = account.name.toLowerCase().includes(searchName) || (account.assistantName && account.assistantName.toLowerCase().includes(searchName));
-                const matchesCurrency = filterCurrency === '' || account.currency === filterCurrency;
+                const matchesCurrency = filterCurrency == '' || account.currency == filterCurrency;
                 return matchesName && matchesCurrency;
             });
             displayAccounts(filteredAccounts);
