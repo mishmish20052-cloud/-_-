@@ -8,27 +8,33 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.19.6'
-      
-      - name: حذف مجلد android القديم وإنشاء جديد
-        run: |
-          rm -rf android/
-          flutter create --project-name daftar_alhesabat --platforms=android .
-      
-      - run: flutter pub get
-      
-      - name: توليد Hive adapters
-        run: dart run build_runner build --delete-conflicting-outputs
-      
-      - name: بناء APK
-        run: flutter build apk --release
-      
-      - uses: actions/upload-artifact@v4
-        with:
-          name: daftar-alhesabat.apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+    - uses: actions/checkout@v4
+
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.19.6'
+
+    - name: حذف مجلد android القديم وإنشاء جديد
+      run: |
+        rm -rf android/
+        flutter create --project-name daftar_alhesabat --platforms=android .
+
+    - name: تعديل إعدادات Android SDK (رفع minSdkVersion إلى 21)
+      run: |
+        sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+        sed -i 's/minSdkVersion 19/minSdkVersion 21/g' android/app/build.gradle
+
+    - run: flutter pub get
+
+    - name: توليد Hive adapters
+      run: dart run build_runner build --delete-conflicting-outputs
+
+    - name: بناء APK
+      run: flutter build apk --release
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: daftar-alhesabat.apk
+        path: build/app/outputs/flutter-apk/app-release.apk
