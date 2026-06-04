@@ -45,10 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
           IconButton(
-            // ✅ التعديل هنا: Icons.whatsapp -> Icons.message
-            icon: const Icon(Icons.message),
+            icon: const Icon(Icons.message), // تم تعديل الأيقونة
             onPressed: () {
-              // يمكنك إضافة وظيفة مشاركة أو دعم واتساب هنا
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('ميزة الدعم عبر واتساب قريباً')),
               );
@@ -83,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () {
+          // ✅ تم تعديل هذا السطر: لم نعد نمرر accountId
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
