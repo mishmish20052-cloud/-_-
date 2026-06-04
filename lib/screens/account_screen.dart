@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:daftar_alhesabat/database/hive_service.dart';
 import 'package:daftar_alhesabat/models/account.dart';
 import 'package:daftar_alhesabat/models/transaction.dart';
+import 'package:daftar_alhesabat/screens/add_transaction_screen.dart'; // ✅ تم إضافة هذا الاستيراد
 import 'package:intl/intl.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -36,13 +37,13 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     if (_account == null) {
-      return const Scaffold(
-        appBar: AppBar(title: Text('الحساب')),
-        body: Center(child: Text('الحساب غير موجود')),
+      return Scaffold(  // ✅ تم إزالة const
+        appBar: AppBar(title: const Text('الحساب')),
+        body: const Center(child: Text('الحساب غير موجود')),
       );
     }
 
-    return Scaffold(
+    return Scaffold(  // ✅ تم إزالة const
       appBar: AppBar(title: Text(_account.name)),
       body: Column(
         children: [
@@ -85,7 +86,7 @@ class _AccountScreenState extends State<AccountScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => AddTransactionScreen(accountId: widget.accountId),
+              builder: (_) => AddTransactionScreen(accountId: widget.accountId), // ✅ نمرر accountId
             ),
           ).then((_) => _loadData());
         },
