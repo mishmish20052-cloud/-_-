@@ -1,4 +1,5 @@
-
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:daftar_alhesabat/database/hive_service.dart';
 import 'package:daftar_alhesabat/models/account.dart';
@@ -13,6 +14,67 @@ import 'package:csv/csv.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
+// ────────────────────────────────────────────────────────────
+// مُساعِد التصدير الموحَّد (لمنع تكرار الكود)
+// ────────────────────────────────────────────────────────────
+class ExportHelper {
+  static Future<void> sharePdf(BuildContext context, String title, Future<List<int>> generatePdf) async {
+    final pdfBytes = await generatePdf;
+    await Printing.sharePdf(bytes: Uint8List.fromList(pdfBytes), filename: '$title.pdf');
+  }
+
+  static Future<void> saveExcel(BuildContext context, String title, Future<List<int>> generateExcel) async {
+    final excelBytes = await generateExcel;
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/$title.xlsx');
+    await file.writeAsBytes(excelBytes);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ Excel في ${file.path}')));
+    }
+  }
+
+  static Future<void> saveCsv(BuildContext context, String title, Future<List<int>> generateCsv) async {
+    final csvBytes = await generateCsv;
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/$title.csv');
+    await file.writeAsBytes(csvBytes);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ CSV في ${file.path}')));
+    }
+  }
+
+  static Widget buildExportButtons(BuildContext context, {
+    required Future<List<int>> Function() onPdf,
+    required Future<List<int>> Function() onExcel,
+    required Future<List<int>> Function() onCsv,
+    required String title,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        ElevatedButton.icon(
+          onPressed: () => sharePdf(context, title, onPdf()),
+          icon: const Icon(Icons.picture_as_pdf),
+          label: const Text('PDF'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => saveExcel(context, title, onExcel()),
+          icon: const Icon(Icons.table_chart),
+          label: const Text('Excel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => saveCsv(context, title, onCsv()),
+          icon: const Icon(Icons.description),
+          label: const Text('CSV'),
+        ),
+      ],
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// الشاشة الرئيسية للتقارير
+// ────────────────────────────────────────────────────────────
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
@@ -41,38 +103,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('التقارير'),
-      ),
+      appBar: AppBar(title: const Text('التقارير')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: ListView(
           children: [
-            _buildReportButton(
-              context,
-              'تقرير إجمالي المبالغ (لكل عميل)',
-              () => _showTotalAmountsReport(context),
-            ),
-            _buildReportButton(
-              context,
-              'تقرير تفاصيل كل المبالغ (جميع المعاملات)',
-              () => _showDetailedTransactionsReport(context),
-            ),
-            _buildReportButton(
-              context,
-              'تقرير إجمالي المبالغ شهرياً (رسم بياني)',
-              () => _showMonthlyAmountsChart(context),
-            ),
-            _buildReportButton(
-              context,
-              'تقرير إجمالي التصنيفات (رسم بياني)',
-              () => _showCategoriesPieChart(context),
-            ),
-            _buildReportButton(
-              context,
-              'تقرير حركة الحسابات (يومية/أسبوعية)',
-              () => _showAccountMovementReport(context),
-            ),
+            _buildReportButton(context, 'تقرير إجمالي المبالغ (لكل عميل)',
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => TotalAmountsReportView(accounts: _accounts)))),
+            _buildReportButton(context, 'تقرير تفاصيل كل المبالغ (جميع المعاملات)',
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailedTransactionsReportView(transactions: _transactions, accounts: _accounts)))),
+            _buildReportButton(context, 'تقرير إجمالي المبالغ شهرياً (رسم بياني)',
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonthlyAmountsChartView(transactions: _transactions)))),
+            _buildReportButton(context, 'تقرير إجمالي التصنيفات (رسم بياني)',
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => CategoriesPieChartView(accounts: _accounts)))),
+            _buildReportButton(context, 'تقرير حركة الحسابات (يومية/أسبوعية)',
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => AccountMovementReportView(transactions: _transactions, accounts: _accounts)))),
           ],
         ),
       ),
@@ -82,39 +127,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildReportButton(BuildContext context, String title, VoidCallback onPressed) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
-      child: ListTile(
-        title: Text(title),
-        trailing: const Icon(Icons.arrow_forward_ios),
-        onTap: onPressed,
-      ),
+      child: ListTile(title: Text(title), trailing: const Icon(Icons.arrow_forward_ios), onTap: onPressed),
     );
-  }
-
-  // --- Report Views --- //
-
-  void _showTotalAmountsReport(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => TotalAmountsReportView(accounts: _accounts)));
-  }
-
-  void _showDetailedTransactionsReport(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => DetailedTransactionsReportView(transactions: _transactions, accounts: _accounts)));
-  }
-
-  void _showMonthlyAmountsChart(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => MonthlyAmountsChartView(transactions: _transactions)));
-  }
-
-  void _showCategoriesPieChart(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => CategoriesPieChartView(accounts: _accounts)));
-  }
-
-  void _showAccountMovementReport(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => AccountMovementReportView(transactions: _transactions, accounts: _accounts)));
   }
 }
 
-// --- Individual Report Views (Placeholders) --- //
-
+// ────────────────────────────────────────────────────────────
+// 1. تقرير إجمالي المبالغ (لكل عميل)
+// ────────────────────────────────────────────────────────────
 class TotalAmountsReportView extends StatelessWidget {
   final List<Account> accounts;
   const TotalAmountsReportView({super.key, required this.accounts});
@@ -124,53 +144,31 @@ class TotalAmountsReportView extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('تقرير إجمالي المبالغ')),
       body: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Report content here
-              Table(
-                border: TableBorder.all(),
-                columnWidths: const {
-                  0: FlexColumnWidth(2),
-                  1: FlexColumnWidth(1),
-                  2: FlexColumnWidth(1),
-                  3: FlexColumnWidth(1),
-                },
-                children: [
-                  TableRow(
-                    children: [
-                      _buildTableCell('العميل', isHeader: true),
-                      _buildTableCell('عليه', isHeader: true),
-                      _buildTableCell('له', isHeader: true),
-                      _buildTableCell('العملة', isHeader: true),
-                    ],
-                  ),
-                  ...accounts.map((account) => TableRow(
-                    children: [
-                      _buildTableCell(account.name),
-                      _buildTableCell(account.balanceDue.toStringAsFixed(2)),
-                      _buildTableCell(account.balanceFor.toStringAsFixed(2)),
-                      _buildTableCell(account.currency),
-                    ],
-                  )),
-                ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Table(
+                  border: TableBorder.all(),
+                  columnWidths: const {0: FixedColumnWidth(120), 1: FixedColumnWidth(80), 2: FixedColumnWidth(80), 3: FixedColumnWidth(80)},
+                  children: [
+                    TableRow(children: ['العميل', 'عليه', 'له', 'العملة'].map((t) => _buildCell(t, isHeader: true)).toList()),
+                    ...accounts.map((a) => TableRow(children: [a.name, a.balanceDue.toStringAsFixed(2), a.balanceFor.toStringAsFixed(2), a.currency].map((t) => _buildCell(t)).toList())),
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToPdf(context, 'تقرير إجمالي المبالغ', _generateTotalAmountsPdf),
-                    icon: const Icon(Icons.picture_as_pdf), label: const Text('تصدير PDF')),
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToExcel(context, 'تقرير إجمالي المبالغ', _generateTotalAmountsExcel),
-                    icon: const Icon(Icons.table_chart), label: const Text('تصدير Excel')),
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToCsv(context, 'تقرير إجمالي المبالغ', _generateTotalAmountsCsv),
-                    icon: const Icon(Icons.description), label: const Text('تصدير CSV')),
-                ],
-              )
+              ExportHelper.buildExportButtons(
+                context,
+                title: 'تقرير إجمالي المبالغ',
+                onPdf: () => _generatePdf(),
+                onExcel: () => _generateExcel(),
+                onCsv: () => _generateCsv(),
+              ),
             ],
           ),
         ),
@@ -178,162 +176,81 @@ class TotalAmountsReportView extends StatelessWidget {
     );
   }
 
-  Widget _buildTableCell(String text, {bool isHeader = false}) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Text(
-        text,
-        style: TextStyle(fontWeight: isHeader ? FontWeight.bold : FontWeight.normal),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
+  Widget _buildCell(String text, {bool isHeader = false}) => Padding(
+    padding: const EdgeInsets.all(8.0),
+    child: Text(text, style: TextStyle(fontWeight: isHeader ? FontWeight.bold : FontWeight.normal), textAlign: TextAlign.center),
+  );
 
-  Future<void> _exportToPdf(BuildContext context, String title, Future<List<int>> Function() generatePdf) async {
-    final pdfBytes = await generatePdf();
-    await Printing.sharePdf(bytes: pdfBytes, filename: '$title.pdf');
-  }
-
-  Future<List<int>> _generateTotalAmountsPdf() async {
+  Future<List<int>> _generatePdf() async {
     final pdf = pw.Document();
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('تقرير إجمالي المبالغ', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 20),
-              pw.Table.fromTextArray(
-                headers: ['العميل', 'عليه', 'له', 'العملة'],
-                data: accounts.map((account) => [
-                  account.name,
-                  account.balanceDue.toStringAsFixed(2),
-                  account.balanceFor.toStringAsFixed(2),
-                  account.currency,
-                ]).toList(),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    pdf.addPage(pw.Page(build: (_) => pw.Column(children: [
+      pw.Text('تقرير إجمالي المبالغ', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 20),
+      pw.Table.fromTextArray(headers: ['العميل', 'عليه', 'له', 'العملة'], data: accounts.map((a) => [a.name, a.balanceDue.toStringAsFixed(2), a.balanceFor.toStringAsFixed(2), a.currency]).toList()),
+    ])));
     return pdf.save();
   }
 
-  Future<void> _exportToExcel(BuildContext context, String title, Future<List<int>> Function() generateExcel) async {
-    final excelBytes = await generateExcel();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.xlsx');
-    await file.writeAsBytes(excelBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف Excel في ${file.path}')));
-    // Optionally, open the file or share it
-  }
-
-  Future<List<int>> _generateTotalAmountsExcel() async {
-    var excel = Excel.createExcel();
-    Sheet sheetObject = excel['Sheet1'];
-
-    sheetObject.appendRow(['العميل', 'عليه', 'له', 'العملة']);
-    for (var account in accounts) {
-      sheetObject.appendRow([
-        account.name,
-        account.balanceDue.toStringAsFixed(2),
-        account.balanceFor.toStringAsFixed(2),
-        account.currency,
-      ]);
-    }
+  Future<List<int>> _generateExcel() async {
+    final excel = Excel.createExcel();
+    final sheet = excel['Sheet1'];
+    sheet.appendRow(['العميل', 'عليه', 'له', 'العملة']);
+    for (final a in accounts) sheet.appendRow([a.name, a.balanceDue.toStringAsFixed(2), a.balanceFor.toStringAsFixed(2), a.currency]);
     return excel.encode()!;
   }
 
-  Future<void> _exportToCsv(BuildContext context, String title, Future<List<int>> Function() generateCsv) async {
-    final csvBytes = await generateCsv();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.csv');
-    await file.writeAsBytes(csvBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف CSV في ${file.path}')));
-    // Optionally, open the file or share it
-  }
-
-  Future<List<int>> _generateTotalAmountsCsv() async {
-    List<List<dynamic>> rows = [];
-    rows.add(['العميل', 'عليه', 'له', 'العملة']);
-    for (var account in accounts) {
-      rows.add([
-        account.name,
-        account.balanceDue.toStringAsFixed(2),
-        account.balanceFor.toStringAsFixed(2),
-        account.currency,
-      ]);
-    }
-    String csv = const ListToCsvConverter().convert(rows);
-    return Future.value(utf8.encode(csv));
+  Future<List<int>> _generateCsv() async {
+    final rows = [['العميل', 'عليه', 'له', 'العملة'], ...accounts.map((a) => [a.name, a.balanceDue.toStringAsFixed(2), a.balanceFor.toStringAsFixed(2), a.currency])];
+    return utf8.encode(const ListToCsvConverter().convert(rows));
   }
 }
 
+// ────────────────────────────────────────────────────────────
+// 2. تقرير تفاصيل كل المبالغ (جميع المعاملات) – مع تحسين الأداء
+// ────────────────────────────────────────────────────────────
 class DetailedTransactionsReportView extends StatelessWidget {
   final List<Transaction> transactions;
-  final List<Account> accounts;
-  const DetailedTransactionsReportView({super.key, required this.transactions, required this.accounts});
-
-  String _getAccountName(String accountId) {
-    return accounts.firstWhere((acc) => acc.id == accountId, orElse: () => Account(id: '', name: 'غير معروف', currency: '', category: '')).name;
-  }
+  final Map<String, String> accountNameMap;
+  DetailedTransactionsReportView({super.key, required List<Transaction> transactions, required List<Account> accounts})
+      : transactions = transactions,
+        accountNameMap = {for (var a in accounts) a.id: a.name};
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('تقرير تفاصيل كل المبالغ')),
       body: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Table(
-                border: TableBorder.all(),
-                columnWidths: const {
-                  0: FlexColumnWidth(1.5),
-                  1: FlexColumnWidth(2),
-                  2: FlexColumnWidth(1),
-                  3: FlexColumnWidth(1),
-                  4: FlexColumnWidth(2),
-                },
-                children: [
-                  TableRow(
-                    children: [
-                      _buildTableCell('التاريخ', isHeader: true),
-                      _buildTableCell('العميل', isHeader: true),
-                      _buildTableCell('المبلغ', isHeader: true),
-                      _buildTableCell('النوع', isHeader: true),
-                      _buildTableCell('ملاحظة', isHeader: true),
-                    ],
-                  ),
-                  ...transactions.map((transaction) => TableRow(
-                    children: [
-                      _buildTableCell(DateFormat('yyyy-MM-dd').format(transaction.date)),
-                      _buildTableCell(_getAccountName(transaction.accountId)),
-                      _buildTableCell(transaction.amount.toStringAsFixed(2)),
-                      _buildTableCell(transaction.type == 'due' ? 'عليه' : 'له'),
-                      _buildTableCell(transaction.note ?? ''),
-                    ],
-                  )),
-                ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Table(
+                  border: TableBorder.all(),
+                  columnWidths: const {0: FixedColumnWidth(100), 1: FixedColumnWidth(120), 2: FixedColumnWidth(80), 3: FixedColumnWidth(70), 4: FixedColumnWidth(150)},
+                  children: [
+                    TableRow(children: ['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة'].map((t) => _buildCell(t, isHeader: true)).toList()),
+                    ...transactions.map((t) => TableRow(children: [
+                      DateFormat('yyyy-MM-dd').format(t.date),
+                      accountNameMap[t.accountId] ?? 'غير معروف',
+                      t.amount.toStringAsFixed(2),
+                      t.type == 'due' ? 'عليه' : 'له',
+                      t.note ?? ''
+                    ].map((t) => _buildCell(t)).toList())),
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToPdf(context, 'تقرير تفاصيل المبالغ', _generateDetailedTransactionsPdf),
-                    icon: const Icon(Icons.picture_as_pdf), label: const Text('تصدير PDF')),
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToExcel(context, 'تقرير تفاصيل المبالغ', _generateDetailedTransactionsExcel),
-                    icon: const Icon(Icons.table_chart), label: const Text('تصدير Excel')),
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToCsv(context, 'تقرير تفاصيل المبالغ', _generateDetailedTransactionsCsv),
-                    icon: const Icon(Icons.description), label: const Text('تصدير CSV')),
-                ],
-              )
+              ExportHelper.buildExportButtons(
+                context,
+                title: 'تقرير تفاصيل المبالغ',
+                onPdf: () => _generatePdf(),
+                onExcel: () => _generateExcel(),
+                onCsv: () => _generateCsv(),
+              ),
             ],
           ),
         ),
@@ -341,134 +258,61 @@ class DetailedTransactionsReportView extends StatelessWidget {
     );
   }
 
-  Widget _buildTableCell(String text, {bool isHeader = false}) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Text(
-        text,
-        style: TextStyle(fontWeight: isHeader ? FontWeight.bold : FontWeight.normal),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
+  Widget _buildCell(String text, {bool isHeader = false}) => Padding(
+    padding: const EdgeInsets.all(8.0),
+    child: Text(text, style: TextStyle(fontWeight: isHeader ? FontWeight.bold : FontWeight.normal), textAlign: TextAlign.center),
+  );
 
-  Future<void> _exportToPdf(BuildContext context, String title, Future<List<int>> Function() generatePdf) async {
-    final pdfBytes = await generatePdf();
-    await Printing.sharePdf(bytes: pdfBytes, filename: '$title.pdf');
-  }
-
-  Future<List<int>> _generateDetailedTransactionsPdf() async {
+  Future<List<int>> _generatePdf() async {
     final pdf = pw.Document();
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('تقرير تفاصيل كل المبالغ', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 20),
-              pw.Table.fromTextArray(
-                headers: ['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة'],
-                data: transactions.map((transaction) => [
-                  DateFormat('yyyy-MM-dd').format(transaction.date),
-                  _getAccountName(transaction.accountId),
-                  transaction.amount.toStringAsFixed(2),
-                  transaction.type == 'due' ? 'عليه' : 'له',
-                  transaction.note ?? '',
-                ]).toList(),
-              ),
-            ],
-          );
-        },
+    pdf.addPage(pw.Page(build: (_) => pw.Column(children: [
+      pw.Text('تقرير تفاصيل المبالغ', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 20),
+      pw.Table.fromTextArray(
+        headers: ['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة'],
+        data: transactions.map((t) => [DateFormat('yyyy-MM-dd').format(t.date), accountNameMap[t.accountId] ?? 'غير معروف', t.amount.toStringAsFixed(2), t.type == 'due' ? 'عليه' : 'له', t.note ?? '']).toList(),
       ),
-    );
+    ])));
     return pdf.save();
   }
 
-  Future<void> _exportToExcel(BuildContext context, String title, Future<List<int>> Function() generateExcel) async {
-    final excelBytes = await generateExcel();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.xlsx');
-    await file.writeAsBytes(excelBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف Excel في ${file.path}')));
-  }
-
-  Future<List<int>> _generateDetailedTransactionsExcel() async {
-    var excel = Excel.createExcel();
-    Sheet sheetObject = excel['Sheet1'];
-
-    sheetObject.appendRow(['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة']);
-    for (var transaction in transactions) {
-      sheetObject.appendRow([
-        DateFormat('yyyy-MM-dd').format(transaction.date),
-        _getAccountName(transaction.accountId),
-        transaction.amount.toStringAsFixed(2),
-        transaction.type == 'due' ? 'عليه' : 'له',
-        transaction.note ?? '',
-      ]);
+  Future<List<int>> _generateExcel() async {
+    final excel = Excel.createExcel();
+    final sheet = excel['Sheet1'];
+    sheet.appendRow(['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة']);
+    for (final t in transactions) {
+      sheet.appendRow([DateFormat('yyyy-MM-dd').format(t.date), accountNameMap[t.accountId] ?? 'غير معروف', t.amount.toStringAsFixed(2), t.type == 'due' ? 'عليه' : 'له', t.note ?? '']);
     }
     return excel.encode()!;
   }
 
-  Future<void> _exportToCsv(BuildContext context, String title, Future<List<int>> Function() generateCsv) async {
-    final csvBytes = await generateCsv();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.csv');
-    await file.writeAsBytes(csvBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف CSV في ${file.path}')));
-  }
-
-  Future<List<int>> _generateDetailedTransactionsCsv() async {
-    List<List<dynamic>> rows = [];
-    rows.add(['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة']);
-    for (var transaction in transactions) {
-      rows.add([
-        DateFormat('yyyy-MM-dd').format(transaction.date),
-        _getAccountName(transaction.accountId),
-        transaction.amount.toStringAsFixed(2),
-        transaction.type == 'due' ? 'عليه' : 'له',
-        transaction.note ?? '',
-      ]);
-    }
-    String csv = const ListToCsvConverter().convert(rows);
-    return Future.value(utf8.encode(csv));
+  Future<List<int>> _generateCsv() async {
+    final rows = [['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة'], ...transactions.map((t) => [DateFormat('yyyy-MM-dd').format(t.date), accountNameMap[t.accountId] ?? 'غير معروف', t.amount.toStringAsFixed(2), t.type == 'due' ? 'عليه' : 'له', t.note ?? ''])];
+    return utf8.encode(const ListToCsvConverter().convert(rows));
   }
 }
 
+// ────────────────────────────────────────────────────────────
+// 3. تقرير إجمالي المبالغ شهرياً (رسم بياني)
+// ────────────────────────────────────────────────────────────
 class MonthlyAmountsChartView extends StatelessWidget {
   final List<Transaction> transactions;
   const MonthlyAmountsChartView({super.key, required this.transactions});
 
   Map<String, double> _getMonthlyTotals() {
-    Map<String, double> monthlyTotals = {};
-    for (var transaction in transactions) {
-      final monthYear = DateFormat('yyyy-MM').format(transaction.date);
-      monthlyTotals.update(monthYear, (value) => value + transaction.amount, ifAbsent: () => transaction.amount);
+    final map = <String, double>{};
+    for (final t in transactions) {
+      final key = DateFormat('yyyy-MM').format(t.date);
+      map.update(key, (v) => v + t.amount, ifAbsent: () => t.amount);
     }
-    return monthlyTotals;
+    return map;
   }
 
   @override
   Widget build(BuildContext context) {
     final monthlyTotals = _getMonthlyTotals();
     final sortedMonths = monthlyTotals.keys.toList()..sort();
-
-    List<BarChartGroupData> barGroups = [];
-    for (int i = 0; i < sortedMonths.length; i++) {
-      barGroups.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: monthlyTotals[sortedMonths[i]]!,
-              color: Colors.blue,
-              width: 15,
-            ),
-          ],
-          showingTooltipIndicators: [0],
-        ),
-      );
-    }
+    final barGroups = List.generate(sortedMonths.length, (i) => BarChartGroupData(x: i, barRods: [BarChartRodData(toY: monthlyTotals[sortedMonths[i]]!, color: Colors.blue, width: 15)]));
 
     return Scaffold(
       appBar: AppBar(title: const Text('تقرير إجمالي المبالغ شهرياً')),
@@ -477,164 +321,95 @@ class MonthlyAmountsChartView extends StatelessWidget {
         child: Column(
           children: [
             Expanded(
-              child: BarChart(
-                BarChartData(
-                  barGroups: barGroups,
-                  titlesData: FlTitlesData(
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) {
-                          return SideTitleWidget(
-                            axisSide: meta.axisSide,
-                            child: Text(sortedMonths[value.toInt()]),
-                          );
-                        },
-                        interval: 1,
-                      ),
-                    ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  gridData: FlGridData(show: false),
+              child: BarChart(BarChartData(
+                barGroups: barGroups,
+                titlesData: FlTitlesData(
+                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true)),
+                  bottomTitles: AxisTitles(sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (value, meta) {
+                      if (value.toInt() >= sortedMonths.length) return const SizedBox();
+                      return SideTitleWidget(axisSide: meta.axisSide, child: Text(sortedMonths[value.toInt()], style: const TextStyle(fontSize: 10)));
+                    },
+                    interval: 1,
+                  )),
                 ),
-              ),
+                borderData: FlBorderData(show: false),
+                gridData: const FlGridData(show: false),
+              )),
             ),
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () => _exportToPdf(context, 'تقرير إجمالي المبالغ شهرياً', _generateMonthlyAmountsPdf),
-                  icon: const Icon(Icons.picture_as_pdf), label: const Text('تصدير PDF')),
-                ElevatedButton.icon(
-                  onPressed: () => _exportToExcel(context, 'تقرير إجمالي المبالغ شهرياً', _generateMonthlyAmountsExcel),
-                  icon: const Icon(Icons.table_chart), label: const Text('تصدير Excel')),
-                ElevatedButton.icon(
-                  onPressed: () => _exportToCsv(context, 'تقرير إجمالي المبالغ شهرياً', _generateMonthlyAmountsCsv),
-                  icon: const Icon(Icons.description), label: const Text('تصدير CSV')),
-              ],
-            )
+            ExportHelper.buildExportButtons(
+              context,
+              title: 'تقرير إجمالي المبالغ شهرياً',
+              onPdf: () => _generatePdf(monthlyTotals, sortedMonths),
+              onExcel: () => _generateExcel(monthlyTotals, sortedMonths),
+              onCsv: () => _generateCsv(monthlyTotals, sortedMonths),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _exportToPdf(BuildContext context, String title, Future<List<int>> Function() generatePdf) async {
-    final pdfBytes = await generatePdf();
-    await Printing.sharePdf(bytes: pdfBytes, filename: '$title.pdf');
-  }
-
-  Future<List<int>> _generateMonthlyAmountsPdf() async {
+  Future<List<int>> _generatePdf(Map<String, double> totals, List<String> months) async {
     final pdf = pw.Document();
-    final monthlyTotals = _getMonthlyTotals();
-    final sortedMonths = monthlyTotals.keys.toList()..sort();
-
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('تقرير إجمالي المبالغ شهرياً', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 20),
-              pw.Table.fromTextArray(
-                headers: ['الشهر', 'الإجمالي'],
-                data: sortedMonths.map((month) => [
-                  month,
-                  monthlyTotals[month]!.toStringAsFixed(2),
-                ]).toList(),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    pdf.addPage(pw.Page(build: (_) => pw.Column(children: [
+      pw.Text('تقرير إجمالي المبالغ شهرياً', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 20),
+      pw.Table.fromTextArray(headers: ['الشهر', 'الإجمالي'], data: months.map((m) => [m, totals[m]!.toStringAsFixed(2)]).toList()),
+    ])));
     return pdf.save();
   }
 
-  Future<void> _exportToExcel(BuildContext context, String title, Future<List<int>> Function() generateExcel) async {
-    final excelBytes = await generateExcel();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.xlsx');
-    await file.writeAsBytes(excelBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف Excel في ${file.path}')));
-  }
-
-  Future<List<int>> _generateMonthlyAmountsExcel() async {
-    var excel = Excel.createExcel();
-    Sheet sheetObject = excel['Sheet1'];
-
-    sheetObject.appendRow(['الشهر', 'الإجمالي']);
-    final monthlyTotals = _getMonthlyTotals();
-    final sortedMonths = monthlyTotals.keys.toList()..sort();
-    for (var month in sortedMonths) {
-      sheetObject.appendRow([
-        month,
-        monthlyTotals[month]!.toStringAsFixed(2),
-      ]);
-    }
+  Future<List<int>> _generateExcel(Map<String, double> totals, List<String> months) async {
+    final excel = Excel.createExcel();
+    final sheet = excel['Sheet1'];
+    sheet.appendRow(['الشهر', 'الإجمالي']);
+    for (final m in months) sheet.appendRow([m, totals[m]!.toStringAsFixed(2)]);
     return excel.encode()!;
   }
 
-  Future<void> _exportToCsv(BuildContext context, String title, Future<List<int>> Function() generateCsv) async {
-    final csvBytes = await generateCsv();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.csv');
-    await file.writeAsBytes(csvBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف CSV في ${file.path}')));
-  }
-
-  Future<List<int>> _generateMonthlyAmountsCsv() async {
-    List<List<dynamic>> rows = [];
-    rows.add(['الشهر', 'الإجمالي']);
-    final monthlyTotals = _getMonthlyTotals();
-    final sortedMonths = monthlyTotals.keys.toList()..sort();
-    for (var month in sortedMonths) {
-      rows.add([
-        month,
-        monthlyTotals[month]!.toStringAsFixed(2),
-      ]);
-    }
-    String csv = const ListToCsvConverter().convert(rows);
-    return Future.value(utf8.encode(csv));
+  Future<List<int>> _generateCsv(Map<String, double> totals, List<String> months) async {
+    final rows = [['الشهر', 'الإجمالي'], ...months.map((m) => [m, totals[m]!.toStringAsFixed(2)])];
+    return utf8.encode(const ListToCsvConverter().convert(rows));
   }
 }
 
+// ────────────────────────────────────────────────────────────
+// 4. تقرير إجمالي التصنيفات (رسم بياني دائري)
+// ────────────────────────────────────────────────────────────
 class CategoriesPieChartView extends StatelessWidget {
   final List<Account> accounts;
   const CategoriesPieChartView({super.key, required this.accounts});
 
   Map<String, double> _getCategoryTotals() {
-    Map<String, double> categoryTotals = {};
-    for (var account in accounts) {
-      categoryTotals.update(account.category, (value) => value + (account.balanceDue - account.balanceFor).abs(), ifAbsent: () => (account.balanceDue - account.balanceFor).abs());
+    final map = <String, double>{};
+    for (final a in accounts) {
+      final diff = (a.balanceDue - a.balanceFor).abs(); // إجمالي المبلغ المتبقي (دين أو ائتمان)
+      if (diff > 0) map.update(a.category, (v) => v + diff, ifAbsent: () => diff);
     }
-    return categoryTotals;
+    return map;
   }
 
   @override
   Widget build(BuildContext context) {
     final categoryTotals = _getCategoryTotals();
-    final totalSum = categoryTotals.values.fold(0.0, (sum, item) => sum + item);
-
-    List<PieChartSectionData> pieSections = [];
+    final total = categoryTotals.values.fold(0.0, (s, v) => s + v);
+    final colors = [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple, Colors.teal, Colors.pink, Colors.brown];
     int i = 0;
-    final colors = [Colors.red, Colors.green, Colors.blue, Colors.yellow, Colors.purple, Colors.orange];
-    categoryTotals.forEach((category, total) {
-      final percentage = (total / totalSum * 100).toStringAsFixed(1);
-      pieSections.add(
-        PieChartSectionData(
-          color: colors[i % colors.length],
-          value: total,
-          title: '$category\n$percentage%',
-          radius: 80,
-          titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-      );
+    final sections = categoryTotals.entries.map((e) {
+      final percent = total > 0 ? (e.value / total * 100).toStringAsFixed(1) : '0.0';
+      final color = colors[i % colors.length];
       i++;
-    });
+      return PieChartSectionData(
+        color: color,
+        value: e.value,
+        title: '${e.key}\n$percent%',
+        radius: 80,
+        titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+      );
+    }).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('تقرير إجمالي التصنيفات')),
@@ -642,195 +417,103 @@ class CategoriesPieChartView extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Expanded(
-              child: PieChart(
-                PieChartData(
-                  sections: pieSections,
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 40,
-                  borderData: FlBorderData(show: false),
-                ),
-              ),
-            ),
+            Expanded(child: PieChart(PieChartData(sections: sections, sectionsSpace: 2, centerSpaceRadius: 40, borderData: FlBorderData(show: false)))),
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () => _exportToPdf(context, 'تقرير إجمالي التصنيفات', _generateCategoriesPdf),
-                  icon: const Icon(Icons.picture_as_pdf), label: const Text('تصدير PDF')),
-                ElevatedButton.icon(
-                  onPressed: () => _exportToExcel(context, 'تقرير إجمالي التصنيفات', _generateCategoriesExcel),
-                  icon: const Icon(Icons.table_chart), label: const Text('تصدير Excel')),
-                ElevatedButton.icon(
-                  onPressed: () => _exportToCsv(context, 'تقرير إجمالي التصنيفات', _generateCategoriesCsv),
-                  icon: const Icon(Icons.description), label: const Text('تصدير CSV')),
-              ],
-            )
+            ExportHelper.buildExportButtons(
+              context,
+              title: 'تقرير إجمالي التصنيفات',
+              onPdf: () => _generatePdf(categoryTotals),
+              onExcel: () => _generateExcel(categoryTotals),
+              onCsv: () => _generateCsv(categoryTotals),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _exportToPdf(BuildContext context, String title, Future<List<int>> Function() generatePdf) async {
-    final pdfBytes = await generatePdf();
-    await Printing.sharePdf(bytes: pdfBytes, filename: '$title.pdf');
-  }
-
-  Future<List<int>> _generateCategoriesPdf() async {
+  Future<List<int>> _generatePdf(Map<String, double> totals) async {
     final pdf = pw.Document();
-    final categoryTotals = _getCategoryTotals();
-
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('تقرير إجمالي التصنيفات', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 20),
-              pw.Table.fromTextArray(
-                headers: ['التصنيف', 'الإجمالي'],
-                data: categoryTotals.entries.map((entry) => [
-                  entry.key,
-                  entry.value.toStringAsFixed(2),
-                ]).toList(),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    pdf.addPage(pw.Page(build: (_) => pw.Column(children: [
+      pw.Text('تقرير إجمالي التصنيفات', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 20),
+      pw.Table.fromTextArray(headers: ['التصنيف', 'الإجمالي'], data: totals.entries.map((e) => [e.key, e.value.toStringAsFixed(2)]).toList()),
+    ])));
     return pdf.save();
   }
 
-  Future<void> _exportToExcel(BuildContext context, String title, Future<List<int>> Function() generateExcel) async {
-    final excelBytes = await generateExcel();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.xlsx');
-    await file.writeAsBytes(excelBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف Excel في ${file.path}')));
-  }
-
-  Future<List<int>> _generateCategoriesExcel() async {
-    var excel = Excel.createExcel();
-    Sheet sheetObject = excel['Sheet1'];
-
-    sheetObject.appendRow(['التصنيف', 'الإجمالي']);
-    final categoryTotals = _getCategoryTotals();
-    categoryTotals.forEach((category, total) {
-      sheetObject.appendRow([
-        category,
-        total.toStringAsFixed(2),
-      ]);
-    });
+  Future<List<int>> _generateExcel(Map<String, double> totals) async {
+    final excel = Excel.createExcel();
+    final sheet = excel['Sheet1'];
+    sheet.appendRow(['التصنيف', 'الإجمالي']);
+    for (final e in totals.entries) sheet.appendRow([e.key, e.value.toStringAsFixed(2)]);
     return excel.encode()!;
   }
 
-  Future<void> _exportToCsv(BuildContext context, String title, Future<List<int>> Function() generateCsv) async {
-    final csvBytes = await generateCsv();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.csv');
-    await file.writeAsBytes(csvBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف CSV في ${file.path}')));
-  }
-
-  Future<List<int>> _generateCategoriesCsv() async {
-    List<List<dynamic>> rows = [];
-    rows.add(['التصنيف', 'الإجمالي']);
-    final categoryTotals = _getCategoryTotals();
-    categoryTotals.forEach((category, total) {
-      rows.add([
-        category,
-        total.toStringAsFixed(2),
-      ]);
-    });
-    String csv = const ListToCsvConverter().convert(rows);
-    return Future.value(utf8.encode(csv));
+  Future<List<int>> _generateCsv(Map<String, double> totals) async {
+    final rows = [['التصنيف', 'الإجمالي'], ...totals.entries.map((e) => [e.key, e.value.toStringAsFixed(2)])];
+    return utf8.encode(const ListToCsvConverter().convert(rows));
   }
 }
 
+// ────────────────────────────────────────────────────────────
+// 5. تقرير حركة الحسابات (يومية) – مع تحسين الأداء
+// ────────────────────────────────────────────────────────────
 class AccountMovementReportView extends StatelessWidget {
   final List<Transaction> transactions;
-  final List<Account> accounts;
-  const AccountMovementReportView({super.key, required this.transactions, required this.accounts});
-
-  String _getAccountName(String accountId) {
-    return accounts.firstWhere((acc) => acc.id == accountId, orElse: () => Account(id: '', name: 'غير معروف', currency: '', category: '')).name;
-  }
+  final Map<String, String> accountNameMap;
+  AccountMovementReportView({super.key, required List<Transaction> transactions, required List<Account> accounts})
+      : transactions = transactions,
+        accountNameMap = {for (var a in accounts) a.id: a.name};
 
   @override
   Widget build(BuildContext context) {
-    // Group transactions by day or week
-    Map<String, List<Transaction>> groupedTransactions = {};
-    for (var transaction in transactions) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(transaction.date); // Daily grouping
-      groupedTransactions.putIfAbsent(dateKey, () => []).add(transaction);
+    final grouped = <String, List<Transaction>>{};
+    for (final t in transactions) {
+      final dateKey = DateFormat('yyyy-MM-dd').format(t.date);
+      grouped.putIfAbsent(dateKey, () => []).add(t);
     }
-
-    final sortedDates = groupedTransactions.keys.toList()..sort();
+    final sortedDates = grouped.keys.toList()..sort();
 
     return Scaffold(
       appBar: AppBar(title: const Text('تقرير حركة الحسابات')),
       body: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Report content here
               ...sortedDates.map((date) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(date, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ),
-                  Table(
-                    border: TableBorder.all(),
-                    columnWidths: const {
-                      0: FlexColumnWidth(2),
-                      1: FlexColumnWidth(1),
-                      2: FlexColumnWidth(1),
-                      3: FlexColumnWidth(2),
-                    },
-                    children: [
-                      TableRow(
-                        children: [
-                          _buildTableCell('العميل', isHeader: true),
-                          _buildTableCell('المبلغ', isHeader: true),
-                          _buildTableCell('النوع', isHeader: true),
-                          _buildTableCell('ملاحظة', isHeader: true),
-                        ],
-                      ),
-                      ...groupedTransactions[date]!.map((transaction) => TableRow(
-                        children: [
-                          _buildTableCell(_getAccountName(transaction.accountId)),
-                          _buildTableCell(transaction.amount.toStringAsFixed(2)),
-                          _buildTableCell(transaction.type == 'due' ? 'عليه' : 'له'),
-                          _buildTableCell(transaction.note ?? ''),
-                        ],
-                      )),
-                    ],
+                  Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(date, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Table(
+                      border: TableBorder.all(),
+                      columnWidths: const {0: FixedColumnWidth(120), 1: FixedColumnWidth(80), 2: FixedColumnWidth(70), 3: FixedColumnWidth(150)},
+                      children: [
+                        TableRow(children: ['العميل', 'المبلغ', 'النوع', 'ملاحظة'].map((t) => _buildCell(t, isHeader: true)).toList()),
+                        ...grouped[date]!.map((t) => TableRow(children: [
+                          accountNameMap[t.accountId] ?? 'غير معروف',
+                          t.amount.toStringAsFixed(2),
+                          t.type == 'due' ? 'عليه' : 'له',
+                          t.note ?? ''
+                        ].map((t) => _buildCell(t)).toList())),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 20),
                 ],
               )),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToPdf(context, 'تقرير حركة الحسابات', _generateAccountMovementPdf),
-                    icon: const Icon(Icons.picture_as_pdf), label: const Text('تصدير PDF')),
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToExcel(context, 'تقرير حركة الحسابات', _generateAccountMovementExcel),
-                    icon: const Icon(Icons.table_chart), label: const Text('تصدير Excel')),
-                  ElevatedButton.icon(
-                    onPressed: () => _exportToCsv(context, 'تقرير حركة الحسابات', _generateAccountMovementCsv),
-                    icon: const Icon(Icons.description), label: const Text('تصدير CSV')),
-                ],
-              )
+              ExportHelper.buildExportButtons(
+                context,
+                title: 'تقرير حركة الحسابات',
+                onPdf: () => _generatePdf(grouped, sortedDates),
+                onExcel: () => _generateExcel(grouped, sortedDates),
+                onCsv: () => _generateCsv(grouped, sortedDates),
+              ),
             ],
           ),
         ),
@@ -838,128 +521,48 @@ class AccountMovementReportView extends StatelessWidget {
     );
   }
 
-  Widget _buildTableCell(String text, {bool isHeader = false}) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Text(
-        text,
-        style: TextStyle(fontWeight: isHeader ? FontWeight.bold : FontWeight.normal),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
+  Widget _buildCell(String text, {bool isHeader = false}) => Padding(
+    padding: const EdgeInsets.all(8.0),
+    child: Text(text, style: TextStyle(fontWeight: isHeader ? FontWeight.bold : FontWeight.normal), textAlign: TextAlign.center),
+  );
 
-  Future<void> _exportToPdf(BuildContext context, String title, Future<List<int>> Function() generatePdf) async {
-    final pdfBytes = await generatePdf();
-    await Printing.sharePdf(bytes: pdfBytes, filename: '$title.pdf');
-  }
-
-  Future<List<int>> _generateAccountMovementPdf() async {
+  Future<List<int>> _generatePdf(Map<String, List<Transaction>> grouped, List<String> dates) async {
     final pdf = pw.Document();
-    Map<String, List<Transaction>> groupedTransactions = {};
-    for (var transaction in transactions) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(transaction.date);
-      groupedTransactions.putIfAbsent(dateKey, () => []).add(transaction);
-    }
-    final sortedDates = groupedTransactions.keys.toList()..sort();
-
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('تقرير حركة الحسابات', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 20),
-              ...sortedDates.map((date) => pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(date, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                  pw.SizedBox(height: 10),
-                  pw.Table.fromTextArray(
-                    headers: ['العميل', 'المبلغ', 'النوع', 'ملاحظة'],
-                    data: groupedTransactions[date]!.map((transaction) => [
-                      _getAccountName(transaction.accountId),
-                      transaction.amount.toStringAsFixed(2),
-                      transaction.type == 'due' ? 'عليه' : 'له',
-                      transaction.note ?? '',
-                    ]).toList(),
-                  ),
-                  pw.SizedBox(height: 20),
-                ],
-              )),
-            ],
-          );
-        },
-      ),
-    );
+    pdf.addPage(pw.Page(build: (_) => pw.Column(children: [
+      pw.Text('تقرير حركة الحسابات', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 20),
+      ...dates.map((date) => pw.Column(children: [
+        pw.Text(date, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 10),
+        pw.Table.fromTextArray(
+          headers: ['العميل', 'المبلغ', 'النوع', 'ملاحظة'],
+          data: grouped[date]!.map((t) => [accountNameMap[t.accountId] ?? 'غير معروف', t.amount.toStringAsFixed(2), t.type == 'due' ? 'عليه' : 'له', t.note ?? '']).toList(),
+        ),
+        pw.SizedBox(height: 20),
+      ])),
+    ])));
     return pdf.save();
   }
 
-  Future<void> _exportToExcel(BuildContext context, String title, Future<List<int>> Function() generateExcel) async {
-    final excelBytes = await generateExcel();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.xlsx');
-    await file.writeAsBytes(excelBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف Excel في ${file.path}')));
-  }
-
-  Future<List<int>> _generateAccountMovementExcel() async {
-    var excel = Excel.createExcel();
-    Sheet sheetObject = excel['Sheet1'];
-
-    sheetObject.appendRow(['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة']);
-    Map<String, List<Transaction>> groupedTransactions = {};
-    for (var transaction in transactions) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(transaction.date);
-      groupedTransactions.putIfAbsent(dateKey, () => []).add(transaction);
-    }
-    final sortedDates = groupedTransactions.keys.toList()..sort();
-
-    for (var date in sortedDates) {
-      for (var transaction in groupedTransactions[date]!) {
-        sheetObject.appendRow([
-          DateFormat('yyyy-MM-dd').format(transaction.date),
-          _getAccountName(transaction.accountId),
-          transaction.amount.toStringAsFixed(2),
-          transaction.type == 'due' ? 'عليه' : 'له',
-          transaction.note ?? '',
-        ]);
+  Future<List<int>> _generateExcel(Map<String, List<Transaction>> grouped, List<String> dates) async {
+    final excel = Excel.createExcel();
+    final sheet = excel['Sheet1'];
+    sheet.appendRow(['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة']);
+    for (final date in dates) {
+      for (final t in grouped[date]!) {
+        sheet.appendRow([date, accountNameMap[t.accountId] ?? 'غير معروف', t.amount.toStringAsFixed(2), t.type == 'due' ? 'عليه' : 'له', t.note ?? '']);
       }
     }
     return excel.encode()!;
   }
 
-  Future<void> _exportToCsv(BuildContext context, String title, Future<List<int>> Function() generateCsv) async {
-    final csvBytes = await generateCsv();
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/$title.csv');
-    await file.writeAsBytes(csvBytes);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ ملف CSV في ${file.path}')));
-  }
-
-  Future<List<int>> _generateAccountMovementCsv() async {
-    List<List<dynamic>> rows = [];
-    rows.add(['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة']);
-    Map<String, List<Transaction>> groupedTransactions = {};
-    for (var transaction in transactions) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(transaction.date);
-      groupedTransactions.putIfAbsent(dateKey, () => []).add(transaction);
-    }
-    final sortedDates = groupedTransactions.keys.toList()..sort();
-
-    for (var date in sortedDates) {
-      for (var transaction in groupedTransactions[date]!) {
-        rows.add([
-          DateFormat('yyyy-MM-dd').format(transaction.date),
-          _getAccountName(transaction.accountId),
-          transaction.amount.toStringAsFixed(2),
-          transaction.type == 'due' ? 'عليه' : 'له',
-          transaction.note ?? '',
-        ]);
+  Future<List<int>> _generateCsv(Map<String, List<Transaction>> grouped, List<String> dates) async {
+    final rows = [['التاريخ', 'العميل', 'المبلغ', 'النوع', 'ملاحظة']];
+    for (final date in dates) {
+      for (final t in grouped[date]!) {
+        rows.add([date, accountNameMap[t.accountId] ?? 'غير معروف', t.amount.toStringAsFixed(2), t.type == 'due' ? 'عليه' : 'له', t.note ?? '']);
       }
     }
-    String csv = const ListToCsvConverter().convert(rows);
-    return Future.value(utf8.encode(csv));
+    return utf8.encode(const ListToCsvConverter().convert(rows));
   }
 }
